@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>詩歌朗讀 - 互動語音（平板修正版＋「長」讀音調整）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+
+body{
+  font-family:'Noto Sans TC',sans-serif;
+  -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+  touch-action:manipulation;overflow-x:hidden;
+  min-height:100vh;min-height:-webkit-fill-available;
+}
+html{height:-webkit-fill-available;}
+.gradient-bg{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);}
+.poem-line{transition:.3s;cursor:pointer;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent}
+.poem-line:hover,.poem-line:active,.poem-line.touch-active{transform:translateY(-2px);box-shadow:0 8px 25px rgba(59,130,246,.3)}
+.poem-line.speaking{background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;transform:scale(1.02);box-shadow:0 10px 30px rgba(59,130,246,.4)}
+.wave-animation{position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.2),transparent);transition:left .6s}
+.poem-line.speaking .wave-animation{left:100%}
+.speaker-icon{transition:.3s;opacity:.7;pointer-events:none}
+.poem-line:hover .speaker-icon,.poem-line.speaking .speaker-icon,.poem-line.touch-active .speaker-icon{opacity:1;transform:scale(1.1)}
+.character{position:relative;z-index:10;-webkit-tap-highlight-color:transparent}
+.character:active,.character.touch-active{background:#3b82f6!important;color:#fff!important;transform:scale(1.2)!important;box-shadow:0 0 20px rgba(59,130,246,.6)!important}
+.control-btn{transition:.3s;touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px}
+.control-btn:hover,.control-btn:active{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.2)}
+.quiz-option{touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:60px}
+.quiz-option:active{transform:scale(.98);background:#dbeafe!important}
+.voice-option{touch-action:manipulation;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px}
+
+/* 平板 */
+@media (max-width:1024px) and (min-width:768px){
+  .poem-line{padding:2rem;margin-bottom:1rem}
+  .character{padding:.75rem;margin:.25rem;font-size:1.5rem;min-width:3rem;min-height:3rem;display:inline-flex;align-items:center;justify-content:center}
+  .control-btn{padding:1rem 1.5rem;font-size:1.1rem}
+  .speaker-icon{width:2.5rem;height:2.5rem;opacity:1}
+}
+
+/* 手機 */
+@media (max-width:767px){
+  body{padding:.5rem}
+  .character{padding:.4rem;margin:.1rem;min-width:2.2rem;min-height:2.2rem;display:inline-flex;align-items:center;justify-content:center;font-size:1rem}
+  .poem-line{padding:1rem;margin-bottom:.75rem}
+  .poem-line .text-3xl,.poem-line .text-2xl,.poem-line .text-xl{font-size:1.25rem!important}
+  .poem-line .text-4xl{font-size:1.5rem!important}
+  .poem-line .text-5xl{font-size:1.75rem!important}
+  .speaker-icon{opacity:1;width:1.5rem;height:1.5rem}
+  .control-btn{padding:.75rem 1rem;font-size:.875rem}
+  .quiz-option{padding:.75rem;min-height:50px}
+  h1{font-size:1.25rem!important;text-align:center;margin-bottom:1rem}
+  .max-w-4xl{max-width:100%}
+}
+
+/* 橫向提醒（可保留也可移除） */
+@media screen and (orientation:landscape) and (max-width:1024px){
+  body::before{
+    content:"請將設備轉為直立模式以獲得最佳體驗";
+    position:fixed;inset:0;background:rgba(0,0,0,.9);color:#fff;display:flex;align-items:center;justify-content:center;z-index:9999;font-size:1.2rem;text-align:center;padding:2rem;
+  }
+}
+
+/* 啟動語音浮層 */
+#voiceGate{
+  position:fixed;inset:0;background:rgba(0,0,0,.75);display:none;align-items:center;justify-content:center;z-index:10000;
+}
+#voiceGate .card{
+  background:#fff;border-radius:1rem;max-width:22rem;width:90%;padding:1.25rem;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)
+}
+</style>
+</head>
+<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
+  <!-- 一次性啟動語音浮層（平板/手機第一次必須點一下） -->
+  <div id="voiceGate">
+    <div class="card">
+      <div class="text-2xl font-bold mb-2">🔊 啟動語音</div>
+      <p class="text-gray-600 mb-4">在 iPad / Android 平板上，首次使用需要點一下按鈕以啟動語音引擎。</p>
+      <button id="btnUnlockAudio" class="control-btn bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-full font-medium w-full">
+        允許並啟動語音
+      </button>
+      <p class="text-xs text-gray-500 mt-3">若未出現此提示，代表已自動啟動。</p>
+    </div>
+  </div>
+
+  <div class="max-w-4xl w-full">
+    <!-- 標題與控制區域 -->
+    <div class="flex flex-col lg:flex-row items-center justify-between gap-6 mb-8">
+      <h1 class="text-2xl lg:text-3xl font-bold text-white drop-shadow-lg whitespace-nowrap">
+        國立苗栗特殊教育學校校歌
+      </h1>
+
+      <!-- 語音設定 -->
+      <div class="bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-lg">
+        <div class="flex items-center gap-4">
+          <span class="text-gray-700 font-medium text-xs">語音：</span>
+          <div class="flex gap-1">
+            <label class="flex items-center cursor-pointer">
+              <input type="radio" name="voice" value="female" checked class="sr-only" />
+              <div class="voice-option bg-pink-100 hover:bg-pink-200 text-pink-700 px-2 py-1 rounded-full text-xs font-medium transition-all duration-200 border-2 border-pink-300">
+                👩女生
+              </div>
+            </label>
+            <label class="flex items-center cursor-pointer">
+              <input type="radio" name="voice" value="male" class="sr-only" />
+              <div class="voice-option bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded-full text-xs font-medium transition-all duration-200 border-2 border-transparent">
+                👨男生
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- 控制按鈕 -->
+      <div class="flex gap-3">
+        <button id="playAll" class="control-btn bg-green-500 hover:bg-green-600 text-white px-4 py-2.5 rounded-full text-sm font-medium flex items-center gap-2">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+          播放全部
+        </button>
+        <button id="stopAll" class="control-btn bg-red-500 hover:bg-red-600 text-white px-4 py-2.5 rounded-full text-sm font-medium flex items-center gap-2">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 01-1-1H8z" clip-rule="evenodd"/></svg>
+          停止播放
+        </button>
+      </div>
+    </div>
+
+    <!-- 第一頁 -->
+    <div id="page1" class="page bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 md:p-12">
+      <div class="space-y-8">
+        <div class="poem-line bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border-l-4 border-blue-400 flex items-center justify-between group" data-text="北勢橋頭飄書香">
+          <div class="text-3xl md:text-4xl lg:text-5xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="北">北</span>
+            <span class="character px-2 py-1 rounded" data-char="勢">勢</span>
+            <span class="character px-2 py-1 rounded" data-char="橋">橋</span>
+            <span class="character px-2 py-1 rounded" data-char="頭">頭</span>
+            <span class="character px-2 py-1 rounded" data-char="飄">飄</span>
+            <span class="character px-2 py-1 rounded" data-char="書">書</span>
+            <span class="character px-2 py-1 rounded" data-char="香">香</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-purple-50 to-pink-50 p-6 rounded-xl border-l-4 border-purple-400 flex items-center justify-between group" data-text="後龍溪畔歌聲喨">
+          <div class="text-3xl md:text-4xl lg:text-5xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="後">後</span>
+            <span class="character px-2 py-1 rounded" data-char="龍">龍</span>
+            <span class="character px-2 py-1 rounded" data-char="溪">溪</span>
+            <span class="character px-2 py-1 rounded" data-char="畔">畔</span>
+            <span class="character px-2 py-1 rounded" data-char="歌">歌</span>
+            <span class="character px-2 py-1 rounded" data-char="聲">聲</span>
+            <span class="character px-2 py-1 rounded" data-char="喨">喨</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-purple-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border-l-4 border-green-400 flex items-center justify-between group" data-text="這裡是我們成長的搖籃">
+          <div class="text-2xl md:text-3xl lg:text-4xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="這">這</span>
+            <span class="character px-2 py-1 rounded" data-char="裡">裡</span>
+            <span class="character px-2 py-1 rounded" data-char="是">是</span>
+            <span class="character px-2 py-1 rounded" data-char="我">我</span>
+            <span class="character px-2 py-1 rounded" data-char="們">們</span>
+            <span class="character px-2 py-1 rounded" data-char="成">成</span>
+            <span class="character px-2 py-1 rounded" data-char="長">長</span>
+            <span class="character px-2 py-1 rounded" data-char="的">的</span>
+            <span class="character px-2 py-1 rounded" data-char="搖">搖</span>
+            <span class="character px-2 py-1 rounded" data-char="籃">籃</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-orange-50 to-red-50 p-6 rounded-xl border-l-4 border-orange-400 flex items-center justify-between group" data-text="洋溢著愛的芬芳">
+          <div class="text-3xl md:text-4xl lg:text-5xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="洋">洋</span>
+            <span class="character px-2 py-1 rounded" data-char="溢">溢</span>
+            <span class="character px-2 py-1 rounded" data-char="著">著</span>
+            <span class="character px-2 py-1 rounded" data-char="愛">愛</span>
+            <span class="character px-2 py-1 rounded" data-char="的">的</span>
+            <span class="character px-2 py-1 rounded" data-char="芬">芬</span>
+            <span class="character px-2 py-1 rounded" data-char="芳">芳</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-orange-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二頁 -->
+    <div id="page2" class="page bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 md:p-12 hidden">
+      <div class="space-y-8">
+        <div class="poem-line bg-gradient-to-r from-teal-50 to-cyan-50 p-6 rounded-xl border-l-4 border-teal-400 flex items-center justify-between group" data-text="肯定自我，排除萬難">
+          <div class="text-2xl md:text-3xl lg:text-4xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="肯">肯</span>
+            <span class="character px-2 py-1 rounded" data-char="定">定</span>
+            <span class="character px-2 py-1 rounded" data-char="自">自</span>
+            <span class="character px-2 py-1 rounded" data-char="我">我</span>
+            <span class="character px-2 py-1 rounded mx-2" data-char="，">，</span>
+            <span class="character px-2 py-1 rounded" data-char="排">排</span>
+            <span class="character px-2 py-1 rounded" data-char="除">除</span>
+            <span class="character px-2 py-1 rounded" data-char="萬">萬</span>
+            <span class="character px-2 py-1 rounded" data-char="難">難</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-teal-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-xl border-l-4 border-indigo-400 flex items-center justify-between group" data-text="自立自強，奮發向上">
+          <div class="text-2xl md:text-3xl lg:text-4xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="自">自</span>
+            <span class="character px-2 py-1 rounded" data-char="立">立</span>
+            <span class="character px-2 py-1 rounded" data-char="自">自</span>
+            <span class="character px-2 py-1 rounded" data-char="強">強</span>
+            <span class="character px-2 py-1 rounded mx-2" data-char="，">，</span>
+            <span class="character px-2 py-1 rounded" data-char="奮">奮</span>
+            <span class="character px-2 py-1 rounded" data-char="發">發</span>
+            <span class="character px-2 py-1 rounded" data-char="向">向</span>
+            <span class="character px-2 py-1 rounded" data-char="上">上</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-indigo-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-pink-50 to-rose-50 p-6 rounded-xl border-l-4 border-pink-400 flex items-center justify-between group" data-text="把笑容寫在臉上">
+          <div class="text-3xl md:text-4xl lg:text-5xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="把">把</span>
+            <span class="character px-2 py-1 rounded" data-char="笑">笑</span>
+            <span class="character px-2 py-1 rounded" data-char="容">容</span>
+            <span class="character px-2 py-1 rounded" data-char="寫">寫</span>
+            <span class="character px-2 py-1 rounded" data-char="在">在</span>
+            <span class="character px-2 py-1 rounded" data-char="臉">臉</span>
+            <span class="character px-2 py-1 rounded" data-char="上">上</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-pink-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+
+        <div class="poem-line bg-gradient-to-r from-yellow-50 to-amber-50 p-6 rounded-xl border-l-4 border-yellow-400 flex items-center justify-between group" data-text="讓明天充滿快樂和希望">
+          <div class="text-xl md:text-2xl lg:text-3xl font-medium text-gray-800 flex flex-nowrap gap-1">
+            <span class="character px-2 py-1 rounded" data-char="讓">讓</span>
+            <span class="character px-2 py-1 rounded" data-char="明">明</span>
+            <span class="character px-2 py-1 rounded" data-char="天">天</span>
+            <span class="character px-2 py-1 rounded" data-char="充">充</span>
+            <span class="character px-2 py-1 rounded" data-char="滿">滿</span>
+            <span class="character px-2 py-1 rounded" data-char="快">快</span>
+            <span class="character px-2 py-1 rounded" data-char="樂">樂</span>
+            <span class="character px-2 py-1 rounded" data-char="和">和</span>
+            <span class="character px-2 py-1 rounded" data-char="希">希</span>
+            <span class="character px-2 py-1 rounded" data-char="望">望</span>
+          </div>
+          <svg class="speaker-icon w-8 h-8 text-yellow-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+          <div class="wave-animation"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三頁：測驗 -->
+    <div id="page3" class="page bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 md:p-12 hidden">
+      <div class="text-center mb-8">
+        <h2 class="text-3xl font-bold text-gray-800 mb-4">📝 校歌評量測驗</h2>
+        <p class="text-gray-600">測試您對校歌的理解程度</p>
+      </div>
+      <div id="quizContainer" class="space-y-6"></div>
+      <div id="quizResult" class="hidden text-center mt-8">
+        <div class="bg-gradient-to-r from-green-100 to-blue-100 p-6 rounded-xl">
+          <h3 class="text-2xl font-bold text-gray-800 mb-4">🎉 測驗完成！</h3>
+          <div id="scoreDisplay" class="text-xl font-medium text-gray-700 mb-4"></div>
+          <div id="feedback" class="text-gray-600 mb-6"></div>
+          <button id="retakeQuiz" class="control-btn bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-full font-medium">
+            重新測驗
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 頁面切換 -->
+    <div class="flex justify-center gap-4 mt-6">
+      <button id="prevPage" class="control-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2.5 rounded-full text-sm font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+        上一頁
+      </button>
+      <span id="pageIndicator" class="flex items-center text-white font-medium">第 1 頁 / 共 3 頁</span>
+      <button id="nextPage" class="control-btn bg-gray-500 hover:bg-gray-600 text-white px-4 py-2.5 rounded-full text-sm font-medium flex items-center gap-2">
+        下一頁
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+      </button>
+    </div>
+
+    <!-- 說明 -->
+    <div class="text-center mt-8">
+      <p class="text-white/70 text-sm mb-2">💡 提示：輕觸<strong>單個字</strong>可聆聽清晰的單字發音</p>
+      <p class="text-white/60 text-xs mb-2">或輕觸詩句空白處聆聽整句朗讀 • 平板用戶請先點上方任一按鈕以啟動語音</p>
+      <p class="text-white/60 text-xs mb-2">🎭 可選擇男生或女生發音 • 單字朗讀速度較慢，更適合學習發音</p>
+      <p id="iosVoiceStatus" class="text-yellow-300 text-xs hidden">📱 iPhone/iPad：首次使用請輕觸畫面來啟動語音功能</p>
+    </div>
+  </div>
+
+<script>
+/* ========= 平板語音穩定：初始化與解鎖 ========= */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+const isAndroid = /Android/.test(navigator.userAgent);
+let voicesReady = false;
+let availableVoices = [];
+let selectedVoice = null;
+let gateUnlocked = false;
+let speechInitialized = false;
+let currentSpeech = null;
+let isPlayingAll = false;
+
+/** 顯示啟動浮層（平板 / 手機） */
+function maybeShowVoiceGate(){
+  const gate = document.getElementById('voiceGate');
+  if (!gate) return;
+  if ((isIOS || isAndroid) && !gateUnlocked){
+    gate.style.display = 'flex';
+  }
+}
+
+/** 解鎖語音：需使用者一次點擊 */
+async function unlockSpeechEngine(){
+  try{
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0.01; u.rate = 1; u.pitch = 1; u.lang = 'zh-TW';
+    window.speechSynthesis.getVoices();
+    await awaitVoices(1000);
+    window.speechSynthesis.speak(u);
+    setTimeout(()=>window.speechSynthesis.cancel(), 120);
+    if (window.speechSynthesis.paused) try{ window.speechSynthesis.resume(); }catch(e){}
+    speechInitialized = true;
+    gateUnlocked = true;
+    const gate = document.getElementById('voiceGate');
+    if (gate) gate.style.display = 'none';
+  }catch(e){
+    console.log('unlockSpeechEngine error:', e);
+    const gate = document.getElementById('voiceGate');
+    if (gate) gate.style.display = 'none';
+  }
+}
+
+/** 等待 voices 載入完成 */
+function awaitVoices(timeoutMs = 1500){
+  return new Promise((resolve)=>{
+    const got = window.speechSynthesis.getVoices();
+    if (got && got.length > 0){ voicesReady = true; availableVoices = got; resolve(true); return; }
+    const t = setTimeout(()=>{ availableVoices = window.speechSynthesis.getVoices(); voicesReady = availableVoices.length>0; resolve(true); }, timeoutMs);
+    window.speechSynthesis.onvoiceschanged = () => {
+      clearTimeout(t);
+      availableVoices = window.speechSynthesis.getVoices();
+      voicesReady = availableVoices.length>0;
+      resolve(true);
+    };
+  });
+}
+
+/** 選擇中文語音（盡量挑繁中，其次任一中文） */
+function pickChineseVoice(prefer='female'){
+  if (!voicesReady) return null;
+  const v = availableVoices;
+  const zhPrefer = v.filter(x=> /zh|Hant|TW|HK/i.test(x.lang) || /Chinese|中文|Taiwan|Hong Kong/i.test(x.name));
+  if (zhPrefer.length===0) return null;
+  if (prefer==='male'){
+    return zhPrefer.find(x=> /男|Male|Zhiwei|Kangkang/i.test(x.name)) || zhPrefer[1] || zhPrefer[0];
+  }else{
+    return zhPrefer.find(x=> /女|Female|Mei|Han|Yao|Xiao/i.test(x.name)) || zhPrefer[0];
+  }
+}
+
+/** 單一入口的朗讀函式（含保險機制與平板修復）
+ *  ⚠️ 依你的需求：將所有「長」在發音時替換為「掌」，以確保念成 ㄓㄤˇ。
+ */
+async function speakOnce(text, {rate=0.8, pitch=1.0, isChar=false, element=null}={}){
+  if (!('speechSynthesis' in window)) return;
+
+  if (!speechInitialized && (isIOS || isAndroid)){
+    await unlockSpeechEngine();
+  }
+  window.speechSynthesis.getVoices();
+  await awaitVoices(1200);
+
+  /* ✅ 字音修正：把「長」唸成「掌」 */
+  if (typeof text === 'string' && text.includes("長")) {
+    text = text.replace(/長/g, "掌");
+  }
+
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  if (window.speechSynthesis.paused) try{ window.speechSynthesis.resume(); }catch(e){}
+
+  const u = new SpeechSynthesisUtterance( (text||'').trim() || ' ' );
+  u.lang = 'zh-TW';
+  u.rate = rate; u.pitch = pitch; u.volume = 1.0;
+  if (!selectedVoice){
+    const prefer = document.querySelector('input[name="voice"]:checked')?.value==='male' ? 'male' : 'female';
+    selectedVoice = pickChineseVoice(prefer) || null;
+  }
+  if (selectedVoice) u.voice = selectedVoice;
+
+  // 視覺效果
+  if (element){
+    element.classList.add('speaking');
+    if (isChar){
+      element.style.backgroundColor='#3b82f6';
+      element.style.color='#fff';
+      element.style.transform='scale(1.2)';
+      element.style.boxShadow='0 0 20px rgba(59,130,246,.6)';
+    }
+  }
+
+  return new Promise((resolve)=>{
+    let ended = false;
+    const cleanup = ()=>{
+      if (ended) return;
+      ended = true;
+      if (element){
+        element.classList.remove('speaking');
+        if (isChar){
+          element.style.backgroundColor='';
+          element.style.color='';
+          element.style.transform='';
+          element.style.boxShadow='';
+        }
+      }
+      currentSpeech = null;
+      resolve();
+    };
+
+    // 超時保險（避免部分 Safari 不觸發 onend）
+    const safety = setTimeout(()=>{ try{ window.speechSynthesis.cancel(); }catch(e){} cleanup(); }, Math.max(1200, Math.min(10000, String(text).length*500)));
+
+    u.onend = ()=>{ clearTimeout(safety); cleanup(); };
+    u.onerror = ()=>{ clearTimeout(safety); cleanup(); };
+
+    currentSpeech = u;
+    try{
+      window.speechSynthesis.speak(u);
+      // 若 600ms 尚未開始說話，重試一次
+      setTimeout(()=>{
+        if (!window.speechSynthesis.speaking){
+          try{
+            window.speechSynthesis.cancel();
+            window.speechSynthesis.speak(u);
+          }catch(e){}
+        }
+      }, 600);
+    }catch(e){
+      clearTimeout(safety);
+      cleanup();
+    }
+  });
+}
+
+/* ========= 頁面控制 ========= */
+let currentPage = 1; const totalPages = 3;
+const page1 = document.getElementById('page1');
+const page2 = document.getElementById('page2');
+const page3 = document.getElementById('page3');
+const prevBtn = document.getElementById('prevPage');
+const nextBtn = document.getElementById('nextPage');
+const pageIndicator = document.getElementById('pageIndicator');
+
+function updatePageDisplay(){
+  [page1,page2,page3].forEach(p=>p.classList.add('hidden'));
+  if (currentPage===1) page1.classList.remove('hidden');
+  else if (currentPage===2) page2.classList.remove('hidden');
+  else {
+    page3.classList.remove('hidden');
+    if (!quizInitialized) initializeQuiz();
+  }
+  prevBtn.disabled = currentPage===1;
+  nextBtn.disabled = currentPage===totalPages;
+  pageIndicator.textContent = `第 ${currentPage} 頁 / 共 ${totalPages} 頁`;
+}
+prevBtn.addEventListener('click', ()=>{ if (currentPage>1){ currentPage--; updatePageDisplay(); }});
+nextBtn.addEventListener('click', ()=>{ if (currentPage<totalPages){ currentPage++; updatePageDisplay(); }});
+updatePageDisplay();
+
+/* ========= 語音 UI 綁定（pointer 事件，桌面/平板皆可） ========= */
+const poemLines = document.querySelectorAll('.poem-line');
+const characters = document.querySelectorAll('.character');
+const playAllBtn = document.getElementById('playAll');
+const stopAllBtn = document.getElementById('stopAll');
+const voiceOptions = document.querySelectorAll('input[name="voice"]');
+const voiceLabels = document.querySelectorAll('.voice-option');
+
+/* 啟動浮層綁定 */
+document.getElementById('btnUnlockAudio').addEventListener('click', unlockSpeechEngine);
+document.addEventListener('DOMContentLoaded', ()=>{
+  window.speechSynthesis.getVoices();
+  awaitVoices(1000).then(()=>{
+    voicesReady = true;
+    const prefer = document.querySelector('input[name="voice"]:checked')?.value==='male' ? 'male' : 'female';
+    selectedVoice = pickChineseVoice(prefer);
+  });
+  maybeShowVoiceGate();
+  if (isIOS) document.getElementById('iosVoiceStatus')?.classList.remove('hidden');
+});
+
+/* 語音選項 */
+voiceOptions.forEach((opt, idx)=>{
+  opt.addEventListener('change', ()=>{
+    const prefer = opt.value==='male' ? 'male' : 'female';
+    selectedVoice = pickChineseVoice(prefer);
+    voiceLabels.forEach(l=>{ l.classList.remove('border-pink-300','border-blue-300'); l.classList.add('border-transparent'); });
+    if (opt.value==='female'){ voiceLabels[0].classList.replace('border-transparent','border-pink-300'); }
+    else { voiceLabels[1].classList.replace('border-transparent','border-blue-300'); }
+  });
+});
+
+/* 單字朗讀 */
+characters.forEach(char=>{
+  const text = char.getAttribute('data-char') || char.textContent.trim();
+
+  char.addEventListener('pointerenter', (e)=>{
+    if (e.pointerType==='mouse' && !isPlayingAll){
+      speakOnce(text,{rate:.4,pitch:1.1,isChar:true,element:char});
+    }
+  });
+
+  char.addEventListener('pointerdown', async (e)=>{
+    e.preventDefault();
+    if (!isPlayingAll){
+      await speakOnce(text,{rate:.4,pitch:1.1,isChar:true,element:char});
+    }
+  });
+});
+
+/* 整句朗讀 */
+poemLines.forEach(line=>{
+  const text = line.getAttribute('data-text') || line.textContent.replace(/\s+/g,'').trim();
+
+  line.addEventListener('pointerenter',(e)=>{
+    if (e.pointerType==='mouse' && !isPlayingAll && !e.target.classList.contains('character')){
+      speakOnce(text,{rate:.7,pitch:1.0,isChar:false,element:line});
+    }
+  });
+
+  line.addEventListener('pointerdown', async (e)=>{
+    if (!e.target.classList.contains('character')){
+      e.preventDefault();
+      if (!isPlayingAll){
+        await speakOnce(text,{rate:.7,pitch:1.0,isChar:false,element:line});
+      }
+    }
+  });
+});
+
+/* 播放全部 */
+playAllBtn.addEventListener('click', async ()=>{
+  if (isPlayingAll) return;
+  isPlayingAll = true;
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+  const allTexts = [
+    "北勢橋頭飄書香",
+    "後龍溪畔歌聲喨",
+    "這裡是我們成長的搖籃",
+    "洋溢著愛的芬芳",
+    "肯定自我，排除萬難",
+    "自立自強，奮發向上",
+    "把笑容寫在臉上",
+    "讓明天充滿快樂和希望"
+  ];
+  let i=0;
+  while(i<allTexts.length && isPlayingAll){
+    const pageShould = (i<4)?1:2;
+    if (currentPage!==pageShould){ currentPage = pageShould; updatePageDisplay(); }
+    const currentLines = document.querySelectorAll('.page:not(.hidden) .poem-line');
+    const lineIndex = (i<4)? i : i-4;
+    const lineEl = currentLines[lineIndex];
+    await speakOnce(allTexts[i], {rate:.7,pitch:1.0,isChar:false,element:lineEl});
+    i++;
+    if (!isPlayingAll) break;
+    await new Promise(r=>setTimeout(r,300));
+  }
+  isPlayingAll = false;
+});
+stopAllBtn.addEventListener('click', ()=>{
+  isPlayingAll = false;
+  try{ window.speechSynthesis.cancel(); }catch(e){}
+});
+
+/* ========= 測驗區 ========= */
+let quizInitialized=false,currentQuestionIndex=0,score=0,userAnswers=[];
+const quizQuestions=[
+  {question:"校歌第一句是什麼？",options:["北勢橋頭飄書香","後龍溪畔歌聲喨","這裡是我們成長的搖籃","洋溢著愛的芬芳"],correct:0},
+  {question:"「成長」的「長」字正確發音是？",options:["ㄔㄤˊ","ㄓㄤˇ","ㄔㄤˇ","ㄓㄤˊ"],correct:1},
+  {question:"校歌中提到哪條溪？",options:["淡水河","後龍溪","大甲溪","頭前溪"],correct:1},
+  {question:"校歌中「把笑容寫在臉上」的下一句是？",options:["洋溢著愛的芬芳","自立自強，奮發向上","讓明天充滿快樂和希望","肯定自我，排除萬難"],correct:2},
+  {question:"校歌中強調的精神包括哪些？",options:["自立自強","肯定自我","奮發向上","以上皆是"],correct:3},
+  {question:"校歌第二句「後龍溪畔歌聲喨」中的「喨」字是什麼意思？",options:["響亮清脆","溫柔輕柔","低沉厚重","斷斷續續"],correct:0},
+  {question:"校歌中「北勢橋頭」指的是什麼地方？",options:["學校附近的地標","苗栗的著名景點","校園內的建築","歷史古蹟名稱"],correct:0},
+  {question:"「洋溢著愛的芬芳」這句話表達了什麼意思？",options:["校園裡花香撲鼻","充滿關愛的氛圍","空氣很清新","有很多香水味"],correct:1},
+  {question:"校歌中「肯定自我，排除萬難」體現了什麼教育理念？",options:["競爭至上","自信與堅持","服從聽話","隨遇而安"],correct:1},
+  {question:"整首校歌傳達的核心精神是什麼？",options:["努力讀書考高分","積極樂觀面對人生","嚴格遵守校規","培養藝術才能"],correct:1}
+];
+
+function initializeQuiz(){
+  quizInitialized=true;currentQuestionIndex=0;score=0;userAnswers=[];
+  document.getElementById('quizContainer').classList.remove('hidden');
+  document.getElementById('quizResult').classList.add('hidden');
+  showQuestion();
+}
+
+async function speakQuizText(text){ await speakOnce(text,{rate:.85,pitch:1.0}); }
+
+function showQuestion(){
+  const quizContainer=document.getElementById('quizContainer');
+  const q=quizQuestions[currentQuestionIndex];
+  quizContainer.innerHTML = `
+    <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-6 rounded-xl border-l-4 border-blue-400">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-xl font-bold text-gray-800">題目 ${currentQuestionIndex+1} / ${quizQuestions.length}</h3>
+        <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">進度: ${Math.round((currentQuestionIndex/quizQuestions.length)*100)}%</div>
+      </div>
+      <div class="flex items-center gap-3 mb-6">
+        <p class="text-lg text-gray-700 flex-1">${q.question}</p>
+        <button id="speakQuestion" class="control-btn bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-full">
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.793L4.617 14H2a1 1 0 01-1-1V7a1 1 0 011-1h2.617l3.766-2.793a1 1 0 011.617.793z" clip-rule="evenodd"/><path d="M12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z"/></svg>
+        </button>
+      </div>
+      <div class="space-y-3">
+        ${q.options.map((opt,idx)=>`
+          <button class="quiz-option w-full text-left p-4 bg-white hover:bg-blue-50 border-2 border-gray-200 hover:border-blue-300 rounded-lg transition-all duration-200 font-medium text-gray-700" data-index="${idx}" data-option-text="${opt}">
+            <span class="inline-block w-8 h-8 bg-gray-100 text-gray-600 rounded-full text-center leading-8 mr-3 text-sm font-bold">${String.fromCharCode(65+idx)}</span>
+            ${opt}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+  `;
+  setTimeout(()=>speakQuizText(q.question), 300);
+  document.getElementById('speakQuestion').addEventListener('click', ()=>speakQuizText(q.question));
+
+  quizContainer.querySelectorAll('.quiz-option').forEach(btn=>{
+    const optText = btn.getAttribute('data-option-text');
+    btn.addEventListener('pointerenter',(e)=>{ if(e.pointerType==='mouse') speakQuizText(optText); });
+    btn.addEventListener('pointerdown', async (e)=>{
+      e.preventDefault();
+      await speakQuizText(optText);
+      setTimeout(()=> selectAnswer(parseInt(btn.getAttribute('data-index'))), 250);
+    });
+  });
+}
+
+function playCorrectSound(){
+  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const osc = ctx.createOscillator(), g=ctx.createGain();
+  osc.connect(g); g.connect(ctx.destination);
+  const t=ctx.currentTime;
+  g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.5);
+  osc.frequency.setValueAtTime(523.25,t);
+  osc.frequency.setValueAtTime(659.25,t+0.1);
+  osc.frequency.setValueAtTime(783.99,t+0.2);
+  osc.start(t); osc.stop(t+0.5);
+}
+function playIncorrectSound(){
+  const ctx = new (window.AudioContext||window.webkitAudioContext)();
+  const osc = ctx.createOscillator(), g=ctx.createGain();
+  osc.connect(g); g.connect(ctx.destination);
+  const t=ctx.currentTime;
+  g.gain.setValueAtTime(0.25,t); g.gain.exponentialRampToValueAtTime(0.01,t+0.4);
+  osc.frequency.setValueAtTime(220,t);
+  osc.frequency.setValueAtTime(196,t+0.15);
+  osc.start(t); osc.stop(t+0.4);
+}
+
+function selectAnswer(sel){
+  const q=quizQuestions[currentQuestionIndex];
+  userAnswers[currentQuestionIndex]=sel;
+  const opts=document.querySelectorAll('.quiz-option');
+  opts.forEach((o,idx)=>{
+    o.disabled=true; o.classList.remove('hover:bg-blue-50','hover:border-blue-300');
+    if (idx===q.correct){ o.classList.add('bg-green-100','border-green-400','text-green-800'); o.querySelector('span').classList.add('bg-green-200','text-green-800'); }
+    else if (idx===sel && sel!==q.correct){ o.classList.add('bg-red-100','border-red-400','text-red-800'); o.querySelector('span').classList.add('bg-red-200','text-red-800'); }
+  });
+  if (sel===q.correct){ score++; playCorrectSound(); setTimeout(()=>speakQuizText("答對了！很棒！"), 200); }
+  else { playIncorrectSound(); setTimeout(()=>speakQuizText("答錯了，正確答案是："+q.options[q.correct]), 200); }
+  setTimeout(()=>{
+    currentQuestionIndex++;
+    if (currentQuestionIndex<quizQuestions.length) showQuestion(); else showResult();
+  }, 1600);
+}
+
+function showResult(){
+  const quizContainer=document.getElementById('quizContainer');
+  const quizResult=document.getElementById('quizResult');
+  const scoreDisplay=document.getElementById('scoreDisplay');
+  const feedback=document.getElementById('feedback');
+  quizContainer.classList.add('hidden'); quizResult.classList.remove('hidden');
+  const pct=Math.round((score/quizQuestions.length)*100);
+  scoreDisplay.textContent=`您的得分：${score} / ${quizQuestions.length} (${pct}%)`;
+  let text='',emoji='';
+  if (pct>=90){ emoji='🏆'; text='太棒了！您對校歌非常熟悉！'; }
+  else if (pct>=70){ emoji='👏'; text='很好！您對校歌有不錯的理解！'; }
+  else if (pct>=50){ emoji='📚'; text='還不錯！建議再多聽幾遍校歌加深印象。'; }
+  else { emoji='💪'; text='繼續努力！多練習朗讀校歌會有幫助的。'; }
+  feedback.innerHTML=`${emoji} ${text}`;
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  const r=document.getElementById('retakeQuiz');
+  if (r) r.addEventListener('click', ()=>{ quizInitialized=false; initializeQuiz(); });
+});
+</script>
+</body>
+</html>
